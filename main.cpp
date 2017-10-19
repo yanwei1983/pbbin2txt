@@ -19,7 +19,10 @@ bool SaveToTextualFile(const google::protobuf::Message& pbm, const std::string& 
 	if(ofs.is_open())
 	{
 		std::string text;
-		rv = google::protobuf::TextFormat::PrintToString(pbm, &text);
+		google::protobuf::TextFormat::Printer printer;
+		printer.SetUseUtf8StringEscaping(true);
+		rv = printer.PrintToString(pbm, &text);
+		std::cout << text;
 		ofs << text;
 
 		ofs.close();
@@ -50,9 +53,9 @@ bool LoadFromBinaryFile(const std::string& filename, google::protobuf::Message& 
 
 int main(int argc, char** argv)
 {
-	if(argc < 2)
+	if(argc < 4)
 	{
-		std::cout << "ddl2cpp [in_file_name] [out_file_name]" << std::endl;
+		std::cout << "pbbin2txt [xxx.bytes] [xxx.proto] [Cfg_xxxx] [output.txt]" << std::endl;
 		return 0;
 	}
 
@@ -68,9 +71,23 @@ int main(int argc, char** argv)
 	DiskSourceTree sourceTree;
 	sourceTree.MapPath("", "./");
 	Importer importer(&sourceTree, nullptr);
-	importer.Import(pbname);
+	const FileDescriptor* fdes = importer.Import(pbname);
+	if(fdes == nullptr)
+	{
+		std::cerr << "importer fail";
+		return -1;
+	}
+
 	const Descriptor* desc = importer.pool()->FindMessageTypeByName(cfgname);
-	std::cout << desc->DebugString();
+	if(desc == nullptr)
+	{
+		std::cerr << "find cfgname fail";
+		return -1;
+	}
+
+	std::cout << desc->DebugString() << std::endl;
+	std::cout << "prass any key to start convert" << std::endl;
+	getchar();
 
 	DynamicMessageFactory factory;
 	const Message* message = factory.GetPrototype(desc);
