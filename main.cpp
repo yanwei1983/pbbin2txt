@@ -11,8 +11,11 @@
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/dynamic_message.h>
 #include <google/protobuf/compiler/importer.h>
+#include "get_opt.h"
+#include "StringAlgo.h"
 
-bool SaveToTextualFile(const google::protobuf::Message& pbm, const std::string& filename)
+
+bool SaveToTXTFile(const google::protobuf::Message& pbm, const std::string& filename)
 {
 	bool rv = false;
 	std::ofstream ofs(filename.data(), std::ios::out | std::ios::trunc);
@@ -22,13 +25,48 @@ bool SaveToTextualFile(const google::protobuf::Message& pbm, const std::string& 
 		google::protobuf::TextFormat::Printer printer;
 		printer.SetUseUtf8StringEscaping(true);
 		rv = printer.PrintToString(pbm, &text);
-		std::cout << text;
+		std::cout << text << std::endl;
 		ofs << text;
 
 		ofs.close();
 	}
 	return rv;
 }
+
+bool LoadFromTXTFile(const std::string& filename, google::protobuf::Message& pbm)
+{
+	bool rv = false;
+
+	std::ifstream ifs(filename.data());
+	if(ifs.is_open())
+	{
+		google::protobuf::io::IstreamInputStream raw_input(&ifs); 
+
+		rv = google::protobuf::TextFormat::Parse(&raw_input, &pbm);
+		ifs.close();
+
+		if(rv != true)
+			std::cerr << "ParseFromStream failed, filename is "<< filename.c_str() << std::endl;
+	}
+	else
+	{
+		std::cerr << "Open file failed, filename is "<< filename.c_str() << std::endl;
+	}
+	return rv;
+}
+
+bool SaveToBinaryFile(const google::protobuf::Message& pbm, const std::string& filename)
+{
+	bool rv = false;
+	std::ofstream ofs(filename.data(), std::ios::out | std::ios::binary);
+	if (ofs.is_open())
+	{
+		pbm.SerializeToOstream(&ofs);
+		ofs.close();
+	}
+	return rv;
+}
+
 bool LoadFromBinaryFile(const std::string& filename, google::protobuf::Message& pbm)
 {
 	bool rv = false;
@@ -50,26 +88,30 @@ bool LoadFromBinaryFile(const std::string& filename, google::protobuf::Message& 
 }
 
 
-
 int main(int argc, char** argv)
 {
-	if(argc < 4)
+	get_opt opt(argc, (const char**)argv);
+	if(opt.has("--input") == false ||
+	   opt.has("--pbdir") == false ||
+	   opt.has("--pb") == false ||
+	   opt.has("--help") == true)
 	{
-		std::cout << "pbbin2txt [xxx.bytes] [xxx.proto] [Cfg_xxxx] [output.txt]" << std::endl;
+		std::cout << "pbbin2txt [--input=xxx.bytes] [--pbdir=xxxxx] [--pb=xxx.proto] [--output=output.txt]" << std::endl;
 		return 0;
 	}
 
-	std::string in_file_name{argv[1]};
-	std::string pbname{argv[2]};
-	std::string cfgname{argv[3]};
-	std::string out_file_name{argv[4]};
-
+	std::string in_file_name = opt["--input"];
+	std::string pbdirname = opt["--pbdir"];
+	std::string pbname = opt["--pb"];
+	std::string cfgname = GetFileNameWithoutExt(GetFileNameFromFullPath(pbname));
+	if(opt.has("--cfg"))
+		cfgname = opt["--cfg"];
 
 	using namespace google::protobuf;
 	using namespace google::protobuf::compiler;
 
 	DiskSourceTree sourceTree;
-	sourceTree.MapPath("", "./");
+	sourceTree.MapPath("", pbdirname);
 	Importer importer(&sourceTree, nullptr);
 	const FileDescriptor* fdes = importer.Import(pbname);
 	if(fdes == nullptr)
@@ -93,8 +135,31 @@ int main(int argc, char** argv)
 	const Message* message = factory.GetPrototype(desc);
 	Message* pData = message->New();
 	
-	LoadFromBinaryFile(in_file_name, *pData);
-	SaveToTextualFile(*pData, out_file_name);
-
+	if(opt.has("--t2b"))
+	{
+		LoadFromTXTFile(in_file_name, *pData);
+		if(opt.has("--output"))
+		{
+			SaveToBinaryFile(*pData, opt["--output"]);
+		}
+		else
+		{
+		
+			std::cout << pData->Utf8DebugString()  << std::endl;;
+		}
+	}
+	else
+	{
+		LoadFromBinaryFile(in_file_name, *pData);
+		if(opt.has("--output"))
+		{
+			SaveToTXTFile(*pData, opt["--output"]);
+		}
+		else
+		{
+		
+			std::cout << pData->Utf8DebugString()  << std::endl;;
+		}
+	}
 
 }
